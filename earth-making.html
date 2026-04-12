@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>지구의 형성과 생명체의 탄생</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f3f4f6;
+            color: #1f2937;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border-radius: 0.5rem;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.2);
+        }
+        /* Custom scrollbar for description */
+        .desc-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .desc-scroll::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+            border-radius: 4px;
+        }
+        .desc-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        .desc-scroll::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col p-4 md:p-8">
+
+    <div class="max-w-5xl mx-auto w-full flex-grow flex flex-col bg-white rounded-2xl shadow-xl overflow-hidden">
+        
+        <!-- Header -->
+        <header class="bg-slate-800 text-white p-4 md:p-6 text-center">
+            <h1 class="text-2xl md:text-3xl font-bold">지구의 형성과 생명체의 탄생</h1>
+            <p class="text-slate-300 mt-2 text-sm md:text-base">원시 지구에서 마그마 바다를 거쳐 지각, 바다, 생명체가 탄생하기까지의 과정</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="flex-grow flex flex-col md:flex-row p-4 md:p-6 gap-6">
+            
+            <!-- Canvas Area -->
+            <div class="flex-grow relative bg-black rounded-lg aspect-video md:aspect-auto overflow-hidden shadow-inner border border-slate-200">
+                <canvas id="simulationCanvas"></canvas>
+                
+                <!-- Stage Overlay Label -->
+                <div class="absolute top-4 left-4 bg-black/60 text-white px-3 py-1.5 rounded-md backdrop-blur-sm text-sm font-medium" id="canvasLabel">
+                    1. 미행성체 충돌
+                </div>
+            </div>
+
+            <!-- Sidebar / Controls -->
+            <div class="w-full md:w-80 flex flex-col gap-4">
+                
+                <!-- Timeline / Stages -->
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="font-bold text-slate-700">진행 단계</h2>
+                        <button id="playPauseBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-2">
+                            <span id="playIcon">⏸</span> <span id="playText">일시정지</span>
+                        </button>
+                    </div>
+                    
+                    <div class="relative flex flex-col gap-2" id="stageButtons">
+                        <!-- Buttons injected via JS -->
+                    </div>
+                </div>
+
+                <!-- Description Box -->
+                <div class="bg-blue-50/50 border border-blue-100 p-5 rounded-xl flex-grow flex flex-col">
+                    <h3 class="text-blue-800 font-bold mb-3 flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        해설
+                    </h3>
+                    <p id="descriptionText" class="text-slate-700 leading-relaxed text-sm desc-scroll overflow-y-auto max-h-48 md:max-h-full">
+                        로딩중...
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Data & State ---
+        const stages = [
+            {
+                id: 0,
+                title: "미행성체 충돌",
+                desc: "미행성체의 계속된 충돌로 지구의 크기가 점차 성장하고, 많은 열이 발생하였다."
+            },
+            {
+                id: 1,
+                title: "마그마 바다",
+                desc: "미행성체의 충돌로 발생한 열 때문에 지구의 대부분이 녹아 마그마 바다가 되었고, 이 마그마 속에는 금속 성분이 다량 포함되어 있었다."
+            },
+            {
+                id: 2,
+                title: "맨틀과 핵 분리",
+                desc: "철과 니켈 등 무거운 성분은 지구 중심으로 가라앉고, 상대적으로 가벼운 규산염은 위로 떠올라 핵과 맨틀로 분리되었다."
+            },
+            {
+                id: 3,
+                title: "지각 및 바다 형성, 생명체 탄생",
+                desc: "미행성체의 충돌이 줄어들어 표면이 냉각되면서 원시 지각이 형성되었다. 이후 화산 활동으로 다량의 기체가 방출되었고, 대기 중 수증기가 응결하여 많은 양의 비가 내려 바다가 생기고 생명체가 탄생하였다."
+            }
+        ];
+
+        // Visual targets for each stage to smoothly transition between
+        // Colors are RGB arrays for easy lerping
+        const visualTargets = [
+            { // 0: 충돌
+                skyColor: [26, 26, 26],       // Dark gray/black
+                mantleColor: [139, 0, 0],     // Dark red rock
+                crustThickness: 40,           // 두께는 고정해두고 투명도로 굳는 연출을 함
+                crustOpacity: 0,              // 지각 투명도 (0: 없음, 1: 완전한 지각)
+                crustColor: [80, 80, 80],
+                coreSize: 0,
+                waterLevel: 0,
+                meteorRate: 0.15,
+                rainRate: 0,
+                volcanoOpacity: 0,
+                magmaGlow: 0.2,
+                temperature: 0.1,             // 시작 온도를 낮게 설정 (이후 계속 상승)
+                separationProgress: 0         // 물질 분리 진행 상태 (새로 추가)
+            },
+            { // 1: 마그마 바다
+                skyColor: [45, 19, 0],        // Dark reddish brown
+                mantleColor: [255, 69, 0],    // Bright Orange (Magma)
+                crustThickness: 40,
+                crustOpacity: 0,
+                crustColor: [80, 80, 80],
+                coreSize: 0,
+                waterLevel: 0,
+                meteorRate: 0.12,             // 2단계에서도 미행성체 계속 충돌 중
+                rainRate: 0,
+                volcanoOpacity: 0.8,          // 2단계부터 화산 나타남
+                magmaGlow: 1.0,
+                temperature: 1.0,             // 최고 온도 (마그마 바다)
+                separationProgress: 0
+            },
+            { // 2: 맨틀과 핵 분리
+                skyColor: [74, 74, 85],       // Cloudy gray
+                mantleColor: [204, 51, 0],    // Darker orange/red
+                crustThickness: 40,
+                crustOpacity: 0.0,            // 마그마 상태 유지 (지각은 4단계에서 굳음)
+                crustColor: [77, 77, 77],
+                coreSize: 120,                // Core forms at bottom
+                waterLevel: 0,
+                meteorRate: 0.0,              // 3단계부터 미행성체 충돌 없음
+                rainRate: 0,
+                volcanoOpacity: 0.9,          // 화산 유지
+                magmaGlow: 0.6,               // 표면 아직 뜨거움
+                temperature: 0.8,             // 고온 유지
+                separationProgress: 1.0       // 분리 완료
+            },
+            { // 3: 지각 및 바다 형성, 생명체 탄생
+                skyColor: [107, 174, 214],    // Light blue sky
+                mantleColor: [153, 34, 0],    // Even darker red mantle
+                crustThickness: 45,
+                crustOpacity: 1.0,
+                crustColor: [58, 58, 58],     // Darker crust
+                coreSize: 130,
+                waterLevel: 60,               // Water fills
+                meteorRate: 0,
+                rainRate: 0.5,                // Heavy rain
+                volcanoOpacity: 1.0,          // Active volcano
+                magmaGlow: 0.0,
+                temperature: 0.15,            // 수증기가 응결될 정도로 냉각됨
+                separationProgress: 1.0
+            }
+        ];
+
+        let currentStage = 0;
+        let isPlaying = true;
+        let autoPlayTimer = 0;
+        const AUTO_PLAY_DURATION = 400; // frames per stage (approx 6-7 seconds)
+
+        // Current visual state (starts at stage 0)
+        let state = JSON.parse(JSON.stringify(visualTargets[0]));
+
+        // --- UI Setup ---
+        const stageButtonsContainer = document.getElementById('stageButtons');
+        const descText = document.getElementById('descriptionText');
+        const canvasLabel = document.getElementById('canvasLabel');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const playIcon = document.getElementById('playIcon');
+        const playText = document.getElementById('playText');
+
+        function createButtons() {
+            stageButtonsContainer.innerHTML = '';
+            stages.forEach((stage, index) => {
+                const btn = document.createElement('button');
+                btn.className = `w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-all duration-300 border-2 
+                    ${index === currentStage ? 'bg-blue-100 border-blue-500 text-blue-800 shadow-sm' : 'bg-white border-transparent text-slate-600 hover:bg-slate-100 border-slate-200'}`;
+                btn.innerHTML = `<span class="inline-block w-6 h-6 text-center rounded-full ${index === currentStage ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-600'} mr-2 leading-6">${index + 1}</span> ${stage.title}`;
+                btn.onclick = () => setStage(index);
+                stageButtonsContainer.appendChild(btn);
+            });
+        }
+
+        function updateUI() {
+            createButtons(); // Re-render buttons for active state
+            descText.innerText = stages[currentStage].desc;
+            canvasLabel.innerText = `${currentStage + 1}. ${stages[currentStage].title}`;
+            
+            if (isPlaying) {
+                playIcon.innerText = "⏸";
+                playText.innerText = "일시정지";
+                playPauseBtn.classList.replace('bg-green-600', 'bg-blue-600');
+                playPauseBtn.classList.replace('hover:bg-green-700', 'hover:bg-blue-700');
+            } else {
+                playIcon.innerText = "▶";
+                playText.innerText = "자동재생";
+                playPauseBtn.classList.replace('bg-blue-600', 'bg-green-600');
+                playPauseBtn.classList.replace('hover:bg-blue-700', 'hover:bg-green-700');
+            }
+        }
+
+        function setStage(index) {
+            currentStage = index;
+            autoPlayTimer = 0; // Reset timer
+            if (currentStage === 0) {
+                state.temperature = 0.1; // 1단계 선택 시 온도 초기화 (상승 연출용)
+                state.volcanoOpacity = 0; // 1단계 화산 즉시 제거 (루프 방지)
+                state.waterLevel = 0;
+                state.rainRate = 0;
+                state.crustOpacity = 0;
+            }
+            updateUI();
+        }
+
+        playPauseBtn.onclick = () => {
+            isPlaying = !isPlaying;
+            updateUI();
+        };
+
+        // --- Canvas Setup ---
+        const canvas = document.getElementById('simulationCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        function resize() {
+            width = canvas.parentElement.clientWidth;
+            height = canvas.parentElement.clientHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- Particle Systems ---
+        let particles = [];
+
+        class Particle {
+            constructor(type, x, y) {
+                this.type = type;
+                this.x = x;
+                this.y = y;
+                this.life = 1.0;
+                
+                if (type === 'meteor') {
+                    this.vx = -3 - Math.random() * 5;
+                    this.vy = 5 + Math.random() * 7;
+                    this.size = 2 + Math.random() * 4;
+                    this.color = '#ffaa00';
+                } else if (type === 'rain') {
+                    this.vx = -1 + Math.random() * 2;
+                    this.vy = 10 + Math.random() * 10;
+                    this.size = 1 + Math.random() * 2;
+                    this.color = 'rgba(200, 230, 255, 0.6)';
+                } else if (type === 'explosion') {
+                    this.vx = -2 + Math.random() * 4;
+                    this.vy = -2 - Math.random() * 4;
+                    this.size = 5 + Math.random() * 10;
+                    this.color = Math.random() > 0.5 ? '#ff4500' : '#ffaa00';
+                    this.decay = 0.03 + Math.random() * 0.05;
+                } else if (type === 'bubble') {
+                    this.vx = -0.5 + Math.random() * 1;
+                    this.vy = -1 - Math.random() * 2;
+                    this.size = 3 + Math.random() * 8;
+                    this.color = 'rgba(255, 150, 0, 0.4)';
+                } else if (type === 'smoke') {
+                    this.vx = 1 + Math.random() * 2;
+                    this.vy = -2 - Math.random() * 3;
+                    this.size = 10 + Math.random() * 20;
+                    this.color = 'rgba(100, 100, 100, 0.3)';
+                    this.decay = 0.01;
+                } else if (type === 'text') {
+                    // 3단계 물질 이동 텍스트
+                    this.isHeavy = Math.random() > 0.5;
+                    if (this.isHeavy) {
+                        this.text = Math.random() > 0.5 ? '철' : '니켈';
+                    } else {
+                        this.text = '규산염';
+                    }
+                    this.vx = -0.1 + Math.random() * 0.2; 
+                    // 무거운 물질(철, 니켈)은 아래로(+), 가벼운 물질(규산염)은 위로(-) 
+                    // 이동 속도를 높여 더 눈에 띄게 조정
+                    this.vy = this.isHeavy ? (0.8 + Math.random() * 0.6) : (-0.8 - Math.random() * 0.6); 
+                    this.size = 16; // 폰트 크기 약간 증가
+                    this.color = this.isHeavy ? 'rgba(240, 240, 240, 1.0)' : 'rgba(255, 230, 120, 1.0)';
+                    this.decay = 0.003 + Math.random() * 0.003; // 수명을 늘려 오랫동안 이동하도록 함
+                }
+            }
+
+            update(groundY) {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.type === 'meteor' && this.y >= groundY) {
+                    this.life = 0; // die
+                    // Spawn explosion
+                    for(let i=0; i<5; i++) particles.push(new Particle('explosion', this.x, groundY));
+                }
+                if (this.type === 'rain' && this.y >= groundY - state.waterLevel) {
+                    this.life = 0;
+                    // Spawn small splash (reusing explosion logic with different color)
+                    let splash = new Particle('explosion', this.x, groundY - state.waterLevel);
+                    splash.color = 'rgba(150, 200, 255, 0.5)';
+                    splash.size = 2;
+                    particles.push(splash);
+                }
+                if (this.type === 'explosion' || this.type === 'smoke') {
+                    this.life -= this.decay;
+                    this.size += 0.5;
+                }
+                if (this.type === 'text') {
+                    this.life -= this.decay;
+                    
+                    // 규산염(가벼운 물질)이 맨 위 지표면까지 올라간 후 페이드아웃 되도록 처리
+                    if (!this.isHeavy && this.y <= groundY + 15) {
+                        this.vy = 0; // 더 이상 올라가지 않음
+                        this.life -= 0.05; // 부드럽게 스며들듯 페이드아웃
+                    }
+                    
+                    // 철, 니켈(무거운 물질)이 바닥(핵 부분)에 닿으면 스며들듯 처리
+                    if (this.isHeavy && this.y >= height - 30) {
+                        this.vy = 0;
+                        this.life -= 0.05;
+                    }
+                }
+                if (this.type === 'bubble') {
+                    if (this.y < groundY + state.crustThickness) this.life = 0;
+                    this.life -= 0.005;
+                }
+
+                // Remove off screen
+                if (this.x < -50 || this.x > width + 50 || this.y > height + 50) {
+                    this.life = 0;
+                }
+            }
+
+            draw(ctx) {
+                if (this.life <= 0) return;
+                
+                ctx.beginPath();
+                if (this.type === 'meteor') {
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(this.x - this.vx * 3, this.y - this.vy * 3);
+                    ctx.strokeStyle = this.color;
+                    ctx.lineWidth = this.size;
+                    ctx.stroke();
+                    // head
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fill();
+                } else if (this.type === 'rain') {
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(this.x - this.vx * 2, this.y - this.vy * 2);
+                    ctx.strokeStyle = this.color;
+                    ctx.lineWidth = this.size;
+                    ctx.stroke();
+                } else if (this.type === 'text') {
+                    ctx.globalAlpha = Math.max(0, this.life);
+                    ctx.fillStyle = this.color;
+                    ctx.font = 'bold 15px "Noto Sans KR"';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(this.text, this.x, this.y);
+                    ctx.globalAlpha = 1.0;
+                } else {
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color;
+                    if(this.type === 'explosion' || this.type === 'smoke') ctx.globalAlpha = Math.max(0, this.life);
+                    ctx.fill();
+                    ctx.globalAlpha = 1.0;
+                }
+            }
+        }
+
+        // --- Animation Loop ---
+        function lerp(start, end, amt) {
+            return (1 - amt) * start + amt * end;
+        }
+
+        function lerpColor(c1, c2, amt) {
+            return [
+                lerp(c1[0], c2[0], amt),
+                lerp(c1[1], c2[1], amt),
+                lerp(c1[2], c2[2], amt)
+            ];
+        }
+
+        function updateState() {
+            const target = visualTargets[currentStage];
+            const speed = 0.03; // Transition speed
+
+            if (typeof state.separationProgress === 'undefined') state.separationProgress = 0;
+
+            state.skyColor = lerpColor(state.skyColor, target.skyColor, speed);
+            state.mantleColor = lerpColor(state.mantleColor, target.mantleColor, speed);
+            state.crustColor = lerpColor(state.crustColor, target.crustColor, speed);
+            state.separationProgress = lerp(state.separationProgress, target.separationProgress, speed * 0.25); // 분리 연출 시간을 충분히 벌어줌
+            
+            let t_rainRate = target.rainRate;
+            let t_volcanoOpacity = target.volcanoOpacity;
+
+            // --- 각 단계별 순차적 연출 로직 ---
+            if (currentStage === 0) {
+                // 1단계: 미행성체 충돌로 온도가 연속적으로 상승
+                state.temperature += 0.002; 
+                if (state.temperature > 0.9) state.temperature = 0.9;
+                
+                state.crustThickness = lerp(state.crustThickness, target.crustThickness, speed);
+                state.crustOpacity = lerp(state.crustOpacity, target.crustOpacity, speed);
+                state.coreSize = lerp(state.coreSize, target.coreSize, speed);
+                state.waterLevel = lerp(state.waterLevel, target.waterLevel, speed);
+            } 
+            else if (currentStage === 2) {
+                // 3단계: 물질 이동(텍스트) -> 맨틀/핵 경계면 형성 (지각 굳지 않음)
+                state.waterLevel = lerp(state.waterLevel, target.waterLevel, speed);
+                state.crustThickness = lerp(state.crustThickness, target.crustThickness, speed);
+                state.crustOpacity = lerp(state.crustOpacity, target.crustOpacity, speed);
+                state.temperature = lerp(state.temperature, target.temperature, speed);
+                
+                // 물질 이동(글씨 연출)이 충분히 일어난 후 맨틀과 핵의 경계면 형성 시작
+                if (state.separationProgress > 0.5) {
+                    state.coreSize = lerp(state.coreSize, target.coreSize, speed);
+                } else {
+                    state.coreSize = lerp(state.coreSize, 0, speed);
+                }
+            } 
+            else if (currentStage === 3) {
+                // 4단계: 1. 원시 지각 형성 -> 2. 비 -> 3. 바다 차오름
+                state.coreSize = lerp(state.coreSize, target.coreSize, speed);
+                state.crustThickness = lerp(state.crustThickness, target.crustThickness, speed);
+                
+                // 1. 지각 먼저 굳음
+                state.crustOpacity = lerp(state.crustOpacity, target.crustOpacity, speed * 0.5);
+                state.temperature = lerp(state.temperature, target.temperature, speed * 0.5);
+                
+                // 지각이 충분히 굳기 전까지 비 연출 지연 (화산은 target에 따라 계속 유지됨)
+                if (state.crustOpacity < 0.8) {
+                    t_rainRate = 0;
+                    state.waterLevel = lerp(state.waterLevel, 0, speed);
+                } else {
+                    t_rainRate = target.rainRate;
+                    // 비가 충분히 내린 후 바다가 차오름
+                    if (state.rainRate > 0.4) {
+                        state.waterLevel = lerp(state.waterLevel, target.waterLevel, speed * 0.25);
+                    } else {
+                        state.waterLevel = lerp(state.waterLevel, 0, speed);
+                    }
+                }
+            } 
+            else {
+                // 2단계 (마그마 바다)
+                state.crustThickness = lerp(state.crustThickness, target.crustThickness, speed);
+                state.crustOpacity = lerp(state.crustOpacity, target.crustOpacity, speed);
+                state.coreSize = lerp(state.coreSize, target.coreSize, speed);
+                state.waterLevel = lerp(state.waterLevel, target.waterLevel, speed);
+                state.temperature = lerp(state.temperature, target.temperature, speed);
+            }
+            
+            state.meteorRate = lerp(state.meteorRate, target.meteorRate, speed);
+            state.rainRate = lerp(state.rainRate, t_rainRate, speed);
+            state.volcanoOpacity = lerp(state.volcanoOpacity, t_volcanoOpacity, speed);
+            state.magmaGlow = lerp(state.magmaGlow, target.magmaGlow, speed);
+
+            // Auto advance
+            if (isPlaying) {
+                autoPlayTimer++;
+                if (autoPlayTimer > AUTO_PLAY_DURATION) {
+                    autoPlayTimer = 0;
+                    currentStage = (currentStage + 1) % stages.length;
+                    if (currentStage === 0) {
+                        state.temperature = 0.1; // 자동재생 루프 시 1단계 온도 초기화
+                        state.volcanoOpacity = 0; // 화산 즉시 제거
+                        state.waterLevel = 0;
+                        state.rainRate = 0;
+                        state.crustOpacity = 0;
+                    }
+                    updateUI();
+                }
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+            const groundY = height * 0.45; // Ground starts at 45% from top
+
+            // 1. Sky
+            ctx.fillStyle = `rgb(${state.skyColor[0]}, ${state.skyColor[1]}, ${state.skyColor[2]})`;
+            ctx.fillRect(0, 0, width, groundY);
+
+            // 2. Core (Bottom half circle)
+            // Draw mantle first
+            ctx.fillStyle = `rgb(${state.mantleColor[0]}, ${state.mantleColor[1]}, ${state.mantleColor[2]})`;
+            ctx.fillRect(0, groundY, width, height - groundY);
+
+            // Add magma glow effect
+            if (state.magmaGlow > 0) {
+                const gradient = ctx.createLinearGradient(0, groundY, 0, height);
+                gradient.addColorStop(0, `rgba(255, 200, 0, ${state.magmaGlow * 0.5})`);
+                gradient.addColorStop(1, `rgba(255, 50, 0, 0)`);
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, groundY, width, height - groundY);
+            }
+
+            if (state.coreSize > 0) {
+                ctx.beginPath();
+                ctx.arc(width / 2, height + 20, state.coreSize, Math.PI, 0); // Semicircle at bottom
+                const coreGrad = ctx.createRadialGradient(width/2, height+20, 0, width/2, height+20, state.coreSize);
+                coreGrad.addColorStop(0, '#ffffff');
+                coreGrad.addColorStop(0.3, '#ffcc00');
+                coreGrad.addColorStop(1, '#ff6600');
+                ctx.fillStyle = coreGrad;
+                ctx.fill();
+            }
+
+            // 3. Crust (지각이 서서히 굳는 효과)
+            if (state.crustThickness > 0 && state.crustOpacity > 0.01) {
+                ctx.globalAlpha = state.crustOpacity;
+                ctx.fillStyle = `rgb(${state.crustColor[0]}, ${state.crustColor[1]}, ${state.crustColor[2]})`;
+                ctx.fillRect(0, groundY, width, state.crustThickness);
+                
+                // Add texture line to crust
+                ctx.strokeStyle = `rgba(0,0,0,${0.3 * state.crustOpacity})`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, groundY + state.crustThickness);
+                ctx.lineTo(width, groundY + state.crustThickness);
+                ctx.stroke();
+                
+                ctx.globalAlpha = 1.0;
+            }
+
+            // 4. Volcano (Appears in stage 2,3,4)
+            if (state.volcanoOpacity > 0.05) {
+                ctx.globalAlpha = state.volcanoOpacity;
+                const vX = width * 0.75;
+                
+                // Mount
+                ctx.beginPath();
+                ctx.moveTo(vX - 60, groundY);
+                ctx.lineTo(vX - 20, groundY - 80);
+                ctx.lineTo(vX + 20, groundY - 80);
+                ctx.lineTo(vX + 60, groundY);
+                ctx.closePath();
+                ctx.fillStyle = `rgb(${state.crustColor[0]-10}, ${state.crustColor[1]-10}, ${state.crustColor[2]-10})`;
+                ctx.fill();
+
+                // Lava inside/top
+                ctx.beginPath();
+                ctx.moveTo(vX - 20, groundY - 80);
+                ctx.lineTo(vX, groundY - 70);
+                ctx.lineTo(vX + 20, groundY - 80);
+                ctx.fillStyle = '#ff4500';
+                ctx.fill();
+
+                // Spawn smoke from volcano
+                if (Math.random() < 0.2) {
+                    particles.push(new Particle('smoke', vX, groundY - 80));
+                }
+
+                ctx.globalAlpha = 1.0;
+            }
+
+            // 5. Water
+            if (state.waterLevel > 0) {
+                ctx.fillStyle = `rgba(30, 130, 200, 0.75)`;
+                ctx.fillRect(0, groundY - state.waterLevel, width, state.waterLevel);
+                
+                // Water surface line
+                ctx.strokeStyle = `rgba(255,255,255,0.4)`;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, groundY - state.waterLevel);
+                ctx.lineTo(width, groundY - state.waterLevel);
+                ctx.stroke();
+            }
+
+            // 6. Particles Generator
+            if (Math.random() < state.meteorRate) {
+                particles.push(new Particle('meteor', Math.random() * width * 1.5, -50));
+            }
+            if (Math.random() < state.rainRate) {
+                for(let i=0; i<3; i++) {
+                    particles.push(new Particle('rain', Math.random() * width, -10));
+                }
+            }
+            // Magma bubbles
+            if (state.magmaGlow > 0.5 && Math.random() < 0.1) {
+                particles.push(new Particle('bubble', Math.random() * width, groundY + Math.random() * (height-groundY)));
+            }
+
+            // 3단계 물질 이동 텍스트 파티클 생성 (3단계 내내 지속)
+            if (currentStage === 2 && Math.random() < 0.12) {
+                const crustBottom = groundY + state.crustThickness;
+                let spawnY = crustBottom + (height - crustBottom) * 0.3 + Math.random() * (height - crustBottom) * 0.4;
+                particles.push(new Particle('text', width * 0.2 + Math.random() * width * 0.6, spawnY));
+            }
+
+            // 7. Update and Draw Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.update(groundY);
+                p.draw(ctx);
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            // 8. 온도계 UI (Thermometer)
+            const thermX = width - 35;
+            const thermY = 50;
+            const thermW = 12;
+            const thermH = height * 0.35;
+            
+            // 온도계 배경
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            if (ctx.roundRect) {
+                ctx.beginPath();
+                ctx.roundRect(thermX, thermY, thermW, thermH, 6);
+                ctx.fill();
+            } else {
+                ctx.fillRect(thermX, thermY, thermW, thermH);
+            }
+
+            // 현재 온도 막대
+            const tempH = thermH * state.temperature;
+            // 온도에 따른 색상 (높으면 붉은색, 낮으면 푸른색)
+            const r = Math.min(255, state.temperature * 255 * 1.5);
+            const b = Math.min(255, (1 - state.temperature) * 255 * 1.5);
+            ctx.fillStyle = `rgb(${r}, 60, ${b})`;
+            
+            if (ctx.roundRect) {
+                ctx.beginPath();
+                ctx.roundRect(thermX, thermY + thermH - tempH, thermW, Math.max(tempH, 6), 6);
+                ctx.fill();
+            } else {
+                ctx.fillRect(thermX, thermY + thermH - tempH, thermW, Math.max(tempH, 2));
+            }
+
+            // 온도계 눈금자 및 텍스트
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.font = 'bold 12px "Noto Sans KR"';
+            ctx.textAlign = 'center';
+            ctx.fillText('온도', thermX + thermW/2, thermY - 10);
+            
+            ctx.font = '11px "Noto Sans KR"';
+            ctx.fillStyle = 'rgba(255, 200, 200, 0.8)';
+            ctx.fillText('고온', thermX - 18, thermY + 10);
+            ctx.fillStyle = 'rgba(200, 200, 255, 0.8)';
+            ctx.fillText('저온', thermX - 18, thermY + thermH);
+
+            // Progress Bar at bottom (Auto play indicator)
+            if (isPlaying) {
+                ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                ctx.fillRect(0, height - 4, width, 4);
+                ctx.fillStyle = '#3b82f6'; // blue-500
+                ctx.fillRect(0, height - 4, (autoPlayTimer / AUTO_PLAY_DURATION) * width, 4);
+            }
+        }
+
+        function loop() {
+            updateState();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        // Init
+        updateUI();
+        loop();
+
+    </script>
+</body>
+</html>
